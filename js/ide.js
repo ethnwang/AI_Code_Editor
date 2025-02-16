@@ -53,36 +53,50 @@ var layoutConfig = {
     content: [{
         type: "row",
         content: [{
-            type: "component",
-            width: 66,
-            componentName: "source",
-            id: "source",
-            title: "Source Code",
-            isClosable: false,
-            componentState: {
-                readOnly: false
-            }
-        }, {
-            type: "column",
+            type: "row",
+            width: 80,
             content: [{
                 type: "component",
-                componentName: "stdin",
-                id: "stdin",
-                title: "Input",
+                width: 66,
+                componentName: "source",
+                id: "source",
+                title: "Source Code",
                 isClosable: false,
                 componentState: {
                     readOnly: false
                 }
             }, {
-                type: "component",
-                componentName: "stdout",
-                id: "stdout",
-                title: "Output",
-                isClosable: false,
-                componentState: {
-                    readOnly: true
-                }
+                type: "column",
+                content: [{
+                    type: "component",
+                    componentName: "stdin",
+                    id: "stdin",
+                    title: "Input",
+                    isClosable: false,
+                    componentState: {
+                        readOnly: false
+                    }
+                }, {
+                    type: "component",
+                    componentName: "stdout",
+                    id: "stdout",
+                    title: "Output",
+                    isClosable: false,
+                    componentState: {
+                        readOnly: true
+                    }
+                }]
             }]
+        }, {
+            type: "component",
+            width: 20,
+            componentName: "chat",
+            id: "chat",
+            title: "Code Assistant",
+            isClosable: false,
+            componentState: {
+                readOnly: false
+            }
         }]
     }]
 };
@@ -580,6 +594,147 @@ $(document).ready(async function () {
             });
         });
 
+        layout.registerComponent("chat", function (container, state) {
+            const chatContainer = document.createElement("div");
+            chatContainer.className = "chat-container h-pull flex flex-col bg-[#1e1e1e]"
+
+            chatContainer.innerHTML = `
+                <div class="chat-header bg-[#252526] border-b border-[#3e3e42] p-4">
+                    <div class="chat-header-content space-y-1">
+                        <h3 class="chat-title text-lg font-semibold text-[#cccccc] flex items-center gap-2">
+                            <svg class="w-5 h-5 text-[#0078d4]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16h5a2 2 0 01-2 2v6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                            </svg>
+                            Code Assistant
+                        </h3>
+                        <p class="chat-description text-sm text-[#8a8a8a]">Ask questions about your code or get help with programming</p>
+                    </div>
+                </div>
+                <div class="messages flex-1 overflow-y-auto p-4 space-y-4"></div>
+                <div class="chat-input-container border-t border-[#3e3e42] p-4 bg-[#252526]">
+                    <div class="chat-input-wrapper flex gap-2">
+                        <textarea
+                            class="chat-input flex-1 bg-[#1e1e1e] text-[#cccccc] rounded-lg border border-[#3e3e42] p-3 focus:outline-none focus:border-[#0078d4] resize-none"
+                            rows="1"
+                            placeholder="Ask about the code..."></textarea>
+                        <button class="send-btn bg-[#0078d4] hover:bg-[#006bb3] text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors" title="Send message (Enter)">
+                            <span>Send</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9-9-9-9-9 2zm0 0v-8"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>`;
+
+                const msgs = chatContainer.querySelector(".messages")
+                const textA = chatContainer.querySelector("textarea")
+                const sendbtn = chatContainer.querySelector(".send-btn")
+
+                // Auto-resize textarea as user types
+                textA.addEventListener('input', function() {
+                    this.style.height = 'auto'
+                    this.style.height = Math.min(this.scrollHeight, 200) + 'px'
+                })
+
+                function formatTimestamp() {
+                    const now = new Date()
+                    return now.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    })
+                }
+
+                function addUserMessage(message) {
+                    const messageHTML = `
+                        <div class="message-wrapper user-message-wrapper flex justify-end">
+                            <div class="message user-message bg-[#0078d4] text-[#ffffff] rounded-2xl rounded-tr-sm px-4 py-2 max-w-[80%]">
+                                <div class="message-content">${message}</div>
+                                <div class="message-timestamp text-xs text-[#e6e6e6] mt-1">${formatTimestamp()}</div>
+                            </div>
+                        </div>`
+                
+                    msgs.insertAdjacentHTML('beforeend', messageHTML)
+                    msgs.scrollTop = msgs.scrollHeight
+                }
+                
+                function addAssistantMessage(message) {
+                    const messageHTML = `
+                        <div class="message-wrapper assistant-message-wrapper flex justify-start">
+                            <div class="message assistant-message bg-[#252526] text-[#cccccc] rounded-2xl rounded-tl-sm px-4 py-2 max-w-[80%]">
+                                <div class="message-content">${message}</div>
+                                <div class="message-timestamp text-xs text-[#8a8a8a] mt-1">${formatTimestamp()}</div>
+                            </div>
+                        </div>`
+                
+                    msgs.insertAdjacentHTML('beforeend', messageHTML)
+                    msgs.scrollTop = msgs.scrollHeight
+                }
+
+                function addTypingIndicator() {
+                    const indicatorHTML = `
+                        <div class="message-wrapper assistant-message-wrapper flex justify-start"
+                            id="typing-indicator">
+                            <div class="message assistant-message bg-[#252526] text-[#cccccc] rounded-2xl
+                                rounded-tl-sm px-4 py-2">
+                                <div class="typing-indicator flex gap-1">
+                                    <div class="typing-dot w-2 h-2 bg-[#8a8a8a] rounded-full animate-bounce"></div>
+                                    <div class="typing-dot w-2 h-2 bg-[#8a8a8a] rounded-full animate-bounce"
+                                        style="animation-delay: 0.2s"></div>
+                                    <div class="typing-dot w-2 h-2 bg-[#8a8a8a] rounded-full animate-bounce"
+                                        style="animation-delay: 0.4s"></div>
+                                </div>
+                            </div>
+                        </div>`
+                    
+                    msgs.insertAdjacentHTML('beforeend', indicatorHTML)
+                    msgs.scrollTop = msgs.scrollHeight
+                }
+                    
+                function removeTypingIndicator() {
+                    const indicator = msgs.querySelector('#typing-indicator')
+                    if (indicator) {
+                        indicator.remove()
+                    }
+                }
+
+                async function sendMessage() {
+                    const message = textA.value.trim()
+                    if (!message) return
+                    // Reset input and its height
+                    textA.value = ''
+                    textA.style.height = '56px' // Reset to initial height
+                    
+                    addUserMessage(message)
+                    addTypingIndicator()
+                    try {
+                        // Simulate API call for now
+                        setTimeout(() => {
+                            removeTypingIndicator()
+                            addAssistantMessage("This is a sample response. The actual integration with GPT-4 will be implemented here.")
+                        }, 1000)
+                    } catch (error) {
+                        removeTypingIndicator()
+                        addAssistantMessage("Sorry, there was an error processing your request.")
+                    }
+                }
+                
+                // Event listeners
+                sendbtn.addEventListener("click", sendMessage)
+                textA.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
+                        sendMessage()
+                    }
+                })
+                
+                container.getElement().append(chatContainer)
+
+
+        });
+
+
+        
         layout.on("initialised", function () {
             setDefaults();
             refreshLayoutSize();
