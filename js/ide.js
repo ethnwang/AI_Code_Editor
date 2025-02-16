@@ -4,6 +4,27 @@ const AUTH_HEADERS = API_KEY ? {
     "Authorization": `Bearer ${API_KEY}`
 } : {};
 
+let OPENROUTER_API_KEY = localStorage.getItem('OPENROUTER_API_KEY') || '';
+
+function setOpenRouterApiKey(key) {
+   OPENROUTER_API_KEY = key;
+   localStorage.setItem('OPENROUTER_API_KEY', key);
+}
+
+let SELECTED_MODEL = localStorage.getItem('SELECTED_MODEL') || 'meta-llama/llama-3.2-3b-instruct:free';
+
+const AVAILABLE_MODELS = [
+   { id: 'meta-llama/llama-3.2-3b-instruct:free', name: 'Llama 3.2 3B (Free)' },
+   { id: 'google/gemini-2.0-flash-thinking-exp-1219:free', name: 'Gemini 2.0 Flash (Free)' },
+   { id: 'deepseek/deepseek-r1-distill-llama-70b:free', name: 'DeepSeek R1 Distill (Free)' },
+   { id: 'qwen/qwen2.5-vl-72b-instruct:free', name: 'Qwen 2.5 VL (Free)' }
+];
+
+function setSelectedModel(modelId){
+    SELECTED_MODEL = modelId;
+    localStorage.setItem('SELECTED_MODEL', modelId)
+}
+
 const CE = "CE";
 const EXTRA_CE = "EXTRA_CE";
 
@@ -607,10 +628,35 @@ $(document).ready(async function () {
                             </svg>
                             Code Assistant
                         </h3>
-                        <p class="chat-description text-sm text-[#8a8a8a]">Ask questions about your code or get help with programming</p>
+                        <div class="flex items-center gap-2">
+                            <input 
+                                type="password"
+                                id="openrouter-api-key"
+                                class="flex-1 bg-[#1e1e1e] text-[#cccccc] text-sm rounded border border-[#3e3e42] px-2 py-1 focus:outline-none focus:border-[#0078d4]"
+                                placeholder="Enter OpenRouter API Key"
+                                value="${OPENROUTER_API_KEY}"
+                            />
+                            <button
+                                id="save-api-key"
+                                class="bg-[#0078d4] hover:bg-[#006bb3] text-white text-sm px-2 py-1 rounded transition-colors">
+                                Save Key
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select 
+                                id="model-selector"
+                                class="flex-1 bg-[#1e1e1e] text-[#cccccc] text-sm rounded border border-[#3e3e42] px-2 py-1 focus:outline-none focus:border-[#0078d4]">
+                                ${AVAILABLE_MODELS.map(model => `
+                                    <option value="${model.id}" ${model.id === SELECTED_MODEL ? 'selected' : ''}>
+                                        ${model.name}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <p class="chat-description text-sm text-[#8a8a8a]">Ask questions about your code!</p>
                     </div>
                 </div>
-                <div class="messages flex-1 overflow-y-auto p-4 space-y-4"></div>
+                <div class="messages flex-1 overflow-y-auto p-4 space-y-4 max-h-[calc(100vh-270px)]"></div>
                 <div class="chat-input-container border-t border-[#3e3e42] p-4 bg-[#252526]">
                     <div class="chat-input-wrapper flex gap-2">
                         <textarea
@@ -645,28 +691,39 @@ $(document).ready(async function () {
                     })
                 }
 
+                function markdownToHtml(text) {
+                    // Basic markdown parsing with XSS protection
+                    return text
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;')  
+                        .replace(/>/g, '&gt;') // Escape HTML first
+                        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                        .replace(/`{3}([\s\S]+?)`{3}/g, '<pre><code>$1</code></pre>')
+                        .replace(/`(.+?)`/g, '<code>$1</code>')
+                        .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+                        .replace(/\n/g, '<br>')
+                }
+
                 function addUserMessage(message) {
                     const messageHTML = `
-                        <div class="message-wrapper user-message-wrapper flex justify-end">
-                            <div class="message user-message bg-[#0078d4] text-[#ffffff] rounded-2xl rounded-tr-sm px-4 py-2 max-w-[80%]">
-                                <div class="message-content">${message}</div>
-                                <div class="message-timestamp text-xs text-[#e6e6e6] mt-1">${formatTimestamp()}</div>
+                        <div class="message-wrapper assistant-message-wrapper flex justify-start px-4">
+                            <div class="message assistant-message bg-[#0078d4] text-[#cccccc] rounded-2xl rounded-tl-sm px-4 py-2 w-full">
+                                <pre class="message-content prose prose-invert whitespace-pre-wrap break-words overflow-x-auto">${markdownToHtml(message)}</pre>
+                                <div class="message-timestamp text-xs text-[#cccccc] mt-1">${formatTimestamp()}</div>
                             </div>
                         </div>`
-                
                     msgs.insertAdjacentHTML('beforeend', messageHTML)
                     msgs.scrollTop = msgs.scrollHeight
                 }
                 
                 function addAssistantMessage(message) {
                     const messageHTML = `
-                        <div class="message-wrapper assistant-message-wrapper flex justify-start">
-                            <div class="message assistant-message bg-[#252526] text-[#cccccc] rounded-2xl rounded-tl-sm px-4 py-2 max-w-[80%]">
-                                <div class="message-content">${message}</div>
-                                <div class="message-timestamp text-xs text-[#8a8a8a] mt-1">${formatTimestamp()}</div>
+                        <div class="message-wrapper user-message-wrapper flex justify-end px-4">
+                            <div class="message user-message bg-[#252526] text-[#ffffff] rounded-2xl rounded-tr-sm px-4 py-2 w-full">
+                                <pre class="message-content prose prose-invert whitespace-pre-wrap break-words overflow-x-auto">${markdownToHtml(message)}</pre>
+                                <div class="message-timestamp text-xs text-[#e6e6e6] mt-1">${formatTimestamp()}</div>
                             </div>
                         </div>`
-                
                     msgs.insertAdjacentHTML('beforeend', messageHTML)
                     msgs.scrollTop = msgs.scrollHeight
                 }
@@ -707,15 +764,76 @@ $(document).ready(async function () {
                     
                     addUserMessage(message)
                     addTypingIndicator()
+                    
+                    const codeContext = {
+                        source_code: sourceEditor.getValue(),
+                        language: $selectLanguage.find(":selected").text(),
+                        stdin: stdinEditor.getValue(),
+                        stdout: stdoutEditor.getValue()
+                    }
+
                     try {
-                        // Simulate API call for now
-                        setTimeout(() => {
-                            removeTypingIndicator()
-                            addAssistantMessage("This is a sample response. The actual integration with GPT-4 will be implemented here.")
-                        }, 1000)
-                    } catch (error) {
+
+                        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                            },
+                            body: JSON.stringify({
+                                model: SELECTED_MODEL,
+                                messages: [{
+                                    role: 'system',
+                                    content: `You are an expert programming 
+                                    assistant. You have access to the following 
+                                    code context:
+                                    Language: ${codeContext.language}
+                                    Source Code:
+                                    \`\`\`
+                                    ${codeContext.source_code}
+                                    \`\`\`
+                                    ${codeContext.stdin ? `Input:\n${codeContext.stdin}\n` : ''}
+                                    ${codeContext.stdout ? `Output:\n${codeContext.stdout}\n` : ''}
+                        
+                                    Provide clear, concise, and accurate 
+                                    responses about the code.
+                                    If suggesting code changes, explain the 
+                                    reasoning and ensure they follow best 
+                                    practices.
+                                    
+                                    If anything is asked that isn't relevant to the code or is innapropriate please reply with
+                                    "That is not within the scope of this project"`
+                                },
+                                {
+                                    role: 'user',
+                                    content: `Here is the user's message:
+                                        <user_message>
+                                        ${message}
+                                        </user_message>
+                                    
+                                        Provide a detailed and accurate response to
+                                        the user's message based on the code context.
+                                        If suggesting code changes, explain the
+                                        reasoning and ensure they follow best
+                                        practices.
+                                    `
+                                }]
+                            })
+                        })
+
+                        if (!response.ok) {
+                            throw new Error(`API request failed: ${response.statusText}`)
+                        }
+                        
+                        const data = await response.json()
+                        const assistantMessage = data.choices[0].message.content
                         removeTypingIndicator()
-                        addAssistantMessage("Sorry, there was an error processing your request.")
+                        addAssistantMessage(assistantMessage)
+
+                    } catch (error) {
+                        console.error('Error:', error)
+                        removeTypingIndicator()
+                        addAssistantMessage("Sorry, there was an error processing your request. Please make sure you have set up your OpenRouter API key correctly.")
                     }
                 }
                 
@@ -727,6 +845,24 @@ $(document).ready(async function () {
                         sendMessage()
                     }
                 })
+
+                const apiKeyInput = chatContainer.querySelector("#openrouter-api-key")
+                const saveKeyBtn = chatContainer.querySelector("#save-api-key")
+                const modelSelector = chatContainer.querySelector("#model-selector")
+
+                saveKeyBtn.addEventListener("click", () => {
+                    const newKey = apiKeyInput.value.trim()
+                    setOpenRouterApiKey(newKey)
+                    addAssistantMessage("API key has been saved.")
+                    // console.log(OPENROUTER_API_KEY)
+                })
+
+                modelSelector.addEventListener("change", (e) => {
+                    setSelectedModel(e.target.value)
+                    addAssistantMessage(`Model changed to ${AVAILABLE_MODELS.find(m => m.id === e.target.value).name}`)
+                 })
+
+                container.getElement().append(chatContainer)
                 
                 container.getElement().append(chatContainer)
 
